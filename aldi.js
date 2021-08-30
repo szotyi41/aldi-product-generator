@@ -426,9 +426,9 @@ menu([
         await fs.rmdirSync('badges', { recursive: true });
         await fs.rmdirSync('badges-cutted', { recursive: true });
 
-        if (!fs.existsSync('feeds')) await fs.mkdirSync('products');
-        if (!fs.existsSync('feeds')) await fs.mkdirSync('badges');
-        if (!fs.existsSync('feeds')) await fs.mkdirSync('badges-cutted');
+        if (!fs.existsSync('products')) await fs.mkdirSync('products');
+        if (!fs.existsSync('badges')) await fs.mkdirSync('badges');
+        if (!fs.existsSync('badges-cutted')) await fs.mkdirSync('badges-cutted');
     }
 
 
