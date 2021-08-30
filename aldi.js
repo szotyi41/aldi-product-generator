@@ -2,13 +2,14 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const download = require('download-file');
+const menu = require('console-menu');
 
 
 String.prototype.splice = function(idx, rem, str) {
     return this.slice(0, idx) + str + this.slice(idx + Math.abs(rem));
 };
 
-DCO = false;
+var DCO = false;
 
 //
 /*
@@ -60,7 +61,7 @@ function getNumber(num) {
     return parseInt(num.toString().replace(' ', ''));
 }
 
-function processFeed(json) {
+function processFeed(json, downloadImages) {
 
     //await fs.mkdir('badges', err => console.log(err));
     //await fs.mkdir('products', err => console.log(err));
@@ -76,6 +77,7 @@ function processFeed(json) {
         const uppercasesWordsInProductName = (productName.match(/([A-Z\-\!\ÁŰÚŐÓÜÖÉ\'\-]{1,})\s/g) ?? []).map(a => a.trim());
         const productNameWithoutUppercaseWords = productName.split(' ').filter(w => !uppercasesWordsInProductName.includes(w)).join(' ');
         const productUrl = content.product?.refs?.default;
+        
         if (!productUrl || !productUrl.includes('https://www.aldi.hu/hu/ajanlatok/akciok-aldi-aron')) {
             return {
                 no_action_url: null
@@ -87,8 +89,9 @@ function processFeed(json) {
         const badgeImage = content.product?.media?.assets?.[0]?.versions?.desktop.src ?? jsonString.match(/\"(https\:\/\/www\.aldi\.hu\/fileadmin[^"]{0,}badge[^\\"]{0,})/)?.[1] ?? '';
         const productImage = jsonString.match(/\"(https\:\/\/www\.aldi\.hu\/fileadmin[^"]{0,}nagy[^\\"]{0,})/)?.[1] ?? jsonString.match(/\"(https\:\/\/www\.aldi\.hu\/fileadmin[^"]{0,}\.jpg[^\\"]{0,})/)?.[1];
         
-        //if (badgeImage.length) await download(badgeImage, { directory: './badges/' });
-        //if (productImage.length) await download(productImage, { directory: './products/' });
+        // Download images
+        if (badgeImage.length && downloadImages) download(badgeImage, { directory: './badges/' });
+        if (productImage.length && downloadImages) download(productImage, { directory: './products/' });
 
         // Prices
         const amount = content.product?.price?.amount ?? '';
@@ -102,9 +105,9 @@ function processFeed(json) {
         basePriceBreaksArray.forEach((a, id) => {
             const indexof = start.indexOf(a);
 
-            //if (id % 2 === 0) {
+            if (id % 2 === 0) {
                 start = start.splice(indexof, 0, '<br/>');
-            //}
+            }
         });
 
         const basePriceFormatted = start.replace('<br/>', '');
@@ -127,10 +130,14 @@ function processFeed(json) {
         // OR the percent is smaller than 15% -> do not show -8% instead: -8Ft
         // ELSE
         // Show percent
-        const priceDifferenceFormatted = ((Number.isInteger(priceDifference / 100) && priceDifference.toString().length < 4) || (priceInPercent < 15)) ? ('-' + priceDifference.toString().split(' ').join('') + 'Ft') : ('-' + priceInPercent + "<span style='font-size:14px'>%</span>");
+        const priceDifferenceFormatted =  (priceInPercent < 11) ? '' : 
+            (((Number.isInteger(priceDifference / 100) && priceDifference.toString().length < 4)) ? 
+            ('-' + priceDifference.toString().split(' ').join('') + 'Ft') : 
+            ('-' + priceInPercent + "<span style='font-size:14px'>%</span>"));
+       
         // Dates
         const regexDates = content.product?.texts?.descriptionHtml.match(/([0-9]{4}(-|.)[0-9]{2}(-|.)[0-9]{2}).*([0-9]{4}(-|.)[0-9]{2}(-|.)[0-9]{2})\-ig/i);
-        const startDate = content.product?.validFrom ?? regexDates?.[1];
+        const startDate = regexDates?.[1]; // content.product?.validFrom ?? 
         if (!startDate) {
             return {
                 no_start_date: null
@@ -168,9 +175,9 @@ function processFeed(json) {
             product_name: productName,
             product_name_formatted: productNameWithoutUppercaseWords,
             product_image_1_url: productImage,
-            product_image_1: (productImage ? 'hu-HU/product/' : '') + productImage.replace(/(.*)\//, ''),
+            product_image_1: (productImage?.length ? 'hu-HU/product/' : '') + baseName(productImage) + (productImage?.length ? '.jpg' : ''),
             product_badge_image_url: badgeImage,
-            product_badge_image: (badgeImage ? 'hu-HU/badge/' : '') + badgeImage.replace(/(.*)\//, ''),
+            product_badge_image: (badgeImage?.length ? 'hu-HU/sticker/' : '') + baseName(badgeImage) + (badgeImage?.length ? '.jpg' : ''),
             product_amount: ('Ft' + amount),
             product_price: price,
             product_price_base: basePriceFormatted,
@@ -197,7 +204,7 @@ function processFeed(json) {
     console.log(feed.filter(p => p.not_in_action === null).length + ' not in action');
 
     const resultFeed = feed.filter(p => p.no_former_price !== null && p.no_start_date !== null && p.no_end_date !== null && p.not_in_action !== null && p.no_action_url !== null);
-    console.log(resultFeed.length + '/' + products.length + ' products imported');
+    console.log('\x1b[32m' + resultFeed.length + '\x1b[0m/' + products.length + ' products imported', 'color: green');
 
     return resultFeed;
 }
@@ -242,14 +249,15 @@ function mixFeed(products) {
                 const p1 = productsGroupBy[dateInerval][productIndex];
                 const p2 = productsGroupBy[dateInerval]?.[productIndex + 1] ?? productsGroupBy[dateInerval]?.[productIndex - 1] ?? productsGroupBy[dateInerval]?.[productIndex];
                 
-                const advert_id = DCO ? '' : p1.product_name + ' - ' + p2.product_name;
-                const advert_name = DCO ? '' : type;
-                const reporting_label = p1.product_image_1_url.replace(/(.*)\//, '') + '_' + p2.product_image_1_url.replace(/(.*)\//, '') + '_' + type;
-
                 const start_day = days_start[p1.start_date_object.getDay()];
                 const end_day = days_end[p1.end_date_object.getDay()];
                 const start_date = '2021-' + (p1.start_date_formatted).replace(/\./g, '-').slice(0, -1);
                 const end_date = '2021-' + (p1.end_date_formatted).replace(/\./g, '-').slice(0, -1);
+
+
+                const advert_id = DCO ? '' : p1.product_name + '_' + p2.product_name + '_' + type;
+                const advert_name = DCO ? start_date + ' ' + end_date : type;
+                const reporting_label = p1.product_image_1_url.replace(/(.*)\//, '') + '_' + p2.product_image_1_url.replace(/(.*)\//, '') + '_' + type;
 
                 const subheadline = 'Érvényes: <b>' + p1.start_date_formatted + '</b> ' + start_day + ' <b>' + p1.end_date_formatted + '</b> ' + end_day + '.';
                 
@@ -260,6 +268,15 @@ function mixFeed(products) {
                 const product_image_2 = DCO ? p2.product_image_1 : p2.product_image_1_url;
 
                 const brand_image_1 = DCO ? 'hu-HU/brand/logo.svg' : 'DRM_Asset:Aldi/logo.svg';
+                const brand_image_2 = DCO ? 'hu-HU/brand/logo_2.svg' : 'DRM_Asset:Aldi/logo_2.svg'
+
+                if (p1.start_date !== p2.start_date) {
+                    console.error('\x1b[31mAfter mixing the two product in same creative has different START dates\x1b[0m');
+                }
+
+                if (p1.end_date !== p2.end_date) {
+                    console.error('\x1b[31mAfter mixing the two product in same creative has different END dates\x1b[0m');
+                }
 
                 return {
                     advert_id: advert_id,
@@ -277,31 +294,33 @@ function mixFeed(products) {
                     product_name_1: p1.product_name_formatted,
                     click_url_1: p1.product_url,
                     sticker_image_1: sticker_image_1,
-                    product_image_1: p1.product_image_1_url,
+                    product_image_1: product_image_1,
                     product_description_1: p1.product_price_base,
                     price_offer_1: p1.product_price_difference_formatted,
                     price_new_1: p1.product_price_formatted,
                     price_old_1: p1.product_former_price_formatted,
                     price_unit_1: p1.product_amount,
+                    product_date_1: p1.start_date,
 
                     slide_class_2: type === 'product' ? ' slide_2_stop' : ' slide_2_continue',
 
                     product_name_2: p2.product_name_formatted,
                     click_url_2: p2.product_url,
                     sticker_image_2: sticker_image_2,
-                    product_image_2: p2.product_image_1_url,
+                    product_image_2: product_image_2,
                     product_description_2: p2.product_price_base,
                     price_offer_2: p2.product_price_difference_formatted,
                     price_new_2: p2.product_price_formatted,
                     price_old_2: p2.product_former_price_formatted,
                     price_unit_2: p2.product_amount,
+                    product_date_2: p2.start_date,
 
                     slide_class_3: type === 'product' ? ' slide_3_continue' : ' slide_3_stop',
 
                     click_url_3: 'https://www.aldi.hu/hu/ajanlatok/akciok-aldi-aron/',
                     cta_1: 'Ajánlatok megtekintése',
                     brand_image_1: brand_image_1,
-                    brand_image_2: 'DRM_Asset:Aldi/logo_2.svg',
+                    brand_image_2: brand_image_2,
                     /*description_1: p1.product_description,
                     description_2: p2.product_description,*/
                 };
@@ -315,12 +334,15 @@ function mixFeed(products) {
     });
 
     // Create default
-    const def = Object.assign({}, result[0]);
-    def.advert_id = def.advert_id + '_default';
-    def.is_default = 'true';
-    def.start_date = '2021-01-01';
-    def.end_date = '2023-01-01';
-    result.unshift(def);
+    if (DCO !== true) {
+        const def = Object.assign({}, result[0]);
+        def.advert_id = def.advert_id + '_default';
+        def.is_default = 'true';
+        def.start_date = '2021-01-01';
+        def.end_date = '2023-01-01';
+        result.unshift(def);
+    }
+
     return result;
 
     // advert_id: random
@@ -348,50 +370,131 @@ function mixFeed(products) {
 
 async function writeToSpreadsheet(arrayOfObjects) {
 
+    const today = new Date();
     const doc = new GoogleSpreadsheet('1Bs7eib38Gh6nLOHd3KnauJOMPRbRFJ0adUYAVHv1Q9Q');
+    const sheetTitle = 'aldi.' + (today.getMonth() + 1) + '.' + today.getDate() + (DCO ? '.dco' : '');
+    const clientEmail = 'triumphspreadsheetserviceaccou@triumphspreadsheetfeedexport.iam.gserviceaccount.com';
+    const privateKey = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCjIecy8+AMCJE3\nR4p0BJ87VL/SQH/jI0NUxnVnhGAlyhBifJizQ3jBQ3jY+sCBB/KDNKnJjvq2mtye\n0Ma6vkZI2a4RsIlyz6gLfFvaldHRrIKTmfRpAIVWhHR4FJo443pVVUMcxY+RmyCk\n9osDzYtOy71MWPFDDOTFjZeZ4ToyO9Z2tZ/KmyFLrG7xuiJhICDartlO7+UUrzVO\nJrR7QTCfI9OvlR2crsKD1+CB8iOi3UNARQZThY4sqirMTSPkufUuMze9MDfKmAi/\nZYMovl786nqOnt9os0NlFzWa5Tqk2BYhP4xzDjtNY0YGBITK7YIS97NUh6X74RE7\nbWF6SvOlAgMBAAECggEACAFR5x4wkGabOas5EBhp9+9gumCP5gWE+FQEzt+gGDqi\nMzMKC0H0WweElqE3cR2CuQ2Mh2eMxgkzale0aNWNfWWxNQ0Esa2fAXFI0KEperCM\nd9HGPKDZ6jT1wi7AoqoHBsj4UiEfunVyVKYEjFs5ytQUpfp3XGL1lvwrxFFZGb3h\n07+mGcKB/VfQAk3EJoFoE58wJhYP/WFCAH4Vn1fv1o37uz8Bi6k4cqkpz6N52n6P\ntuwCrAKCDG9I4ZJM9bhiw0r86/dWVGSnPc7l0VnA//CCTCrxHE4s9qyJchSyIP03\nSO2F81tCld+6SVaZy5+tw8w51etxyJf7xcgP9D9iAQKBgQDgNuZgcDhmB1s9TKp8\nzyl/F3AK5DwPXWhSohmDQFecv5Xk0V2SfPAh3O38ed3WyxMAyhhpu0cAcM/w9V9c\nsCcrQlT10oH9HOJ5Yl9pim6Q7UZ+ayy7ExhOGiiDKKwZyZ+XjaZh1OJ98FSbd3Rm\n9WEjY2w1l6MEzhhF849Z5gCD2QKBgQC6Qj1E+OeHD1FnmwyV8lEsMDMLIZxtAQxY\n+wKEOI83BKnFYIvbyY3nB5TWmDc0zjRumi0fI+54Ko1ihxLUk6uWC+NVvcOyvWRl\nIzjBt9GHPV8H3Z2pfSUL1QCEtJmW2f/Lx2851Nc0/p/Y9agQ67gzGwIgl4mWqxiv\ncFF5OepqrQKBgQCYIUfw+VObDrS+g+1Nn/ZE8G8qRK/nsPYe0zPCVX7csTWQOupl\ngXYhU9j6LOnzWnh7WaR04QgM6X59vM9GgZMiC/C/lmRyjA2yVKfuYWoh1Yy2LBv+\nlrcwDxmb3JXhLWemmgrhaGOBFfciQUvuq+GL9GKwfkGy+e+ITvjeA2woCQKBgACM\na2PFm+Dw8ZttgHb8lLKdnbjdq3lCtIeajaJYDEvsLpfPNfo6uLlCc3TCU/9K0Cq3\nN4TM9UnTTkFJBowrtyik9lFtUqM3HZGSrfscEHjmfF4oj+tM3AwR34OEiKNCFxfB\niZlRACU+zrez2X/bQdqcrL/t0lDoRhVWLlc+DWutAoGACNH0z1KPz7L5mjIhn/A2\nIIiQsFuIFn2k1nXTvMQ7WDbv2xrUgASjqPgeTLNQTYhyPoFYY4iY0KqKid86hOqd\n/b8rk5LXUWnryxM891lArwnBEHi3/ebpV2E87Rt491Fu5pQqZg2DXUlmjEyxaLHM\nbh0G7oA32Giihc6JVuIkmUg=\n-----END PRIVATE KEY-----\n';
 
     await doc.useServiceAccountAuth({
-        client_email: 'triumphspreadsheetserviceaccou@triumphspreadsheetfeedexport.iam.gserviceaccount.com',
-        private_key: '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCjIecy8+AMCJE3\nR4p0BJ87VL/SQH/jI0NUxnVnhGAlyhBifJizQ3jBQ3jY+sCBB/KDNKnJjvq2mtye\n0Ma6vkZI2a4RsIlyz6gLfFvaldHRrIKTmfRpAIVWhHR4FJo443pVVUMcxY+RmyCk\n9osDzYtOy71MWPFDDOTFjZeZ4ToyO9Z2tZ/KmyFLrG7xuiJhICDartlO7+UUrzVO\nJrR7QTCfI9OvlR2crsKD1+CB8iOi3UNARQZThY4sqirMTSPkufUuMze9MDfKmAi/\nZYMovl786nqOnt9os0NlFzWa5Tqk2BYhP4xzDjtNY0YGBITK7YIS97NUh6X74RE7\nbWF6SvOlAgMBAAECggEACAFR5x4wkGabOas5EBhp9+9gumCP5gWE+FQEzt+gGDqi\nMzMKC0H0WweElqE3cR2CuQ2Mh2eMxgkzale0aNWNfWWxNQ0Esa2fAXFI0KEperCM\nd9HGPKDZ6jT1wi7AoqoHBsj4UiEfunVyVKYEjFs5ytQUpfp3XGL1lvwrxFFZGb3h\n07+mGcKB/VfQAk3EJoFoE58wJhYP/WFCAH4Vn1fv1o37uz8Bi6k4cqkpz6N52n6P\ntuwCrAKCDG9I4ZJM9bhiw0r86/dWVGSnPc7l0VnA//CCTCrxHE4s9qyJchSyIP03\nSO2F81tCld+6SVaZy5+tw8w51etxyJf7xcgP9D9iAQKBgQDgNuZgcDhmB1s9TKp8\nzyl/F3AK5DwPXWhSohmDQFecv5Xk0V2SfPAh3O38ed3WyxMAyhhpu0cAcM/w9V9c\nsCcrQlT10oH9HOJ5Yl9pim6Q7UZ+ayy7ExhOGiiDKKwZyZ+XjaZh1OJ98FSbd3Rm\n9WEjY2w1l6MEzhhF849Z5gCD2QKBgQC6Qj1E+OeHD1FnmwyV8lEsMDMLIZxtAQxY\n+wKEOI83BKnFYIvbyY3nB5TWmDc0zjRumi0fI+54Ko1ihxLUk6uWC+NVvcOyvWRl\nIzjBt9GHPV8H3Z2pfSUL1QCEtJmW2f/Lx2851Nc0/p/Y9agQ67gzGwIgl4mWqxiv\ncFF5OepqrQKBgQCYIUfw+VObDrS+g+1Nn/ZE8G8qRK/nsPYe0zPCVX7csTWQOupl\ngXYhU9j6LOnzWnh7WaR04QgM6X59vM9GgZMiC/C/lmRyjA2yVKfuYWoh1Yy2LBv+\nlrcwDxmb3JXhLWemmgrhaGOBFfciQUvuq+GL9GKwfkGy+e+ITvjeA2woCQKBgACM\na2PFm+Dw8ZttgHb8lLKdnbjdq3lCtIeajaJYDEvsLpfPNfo6uLlCc3TCU/9K0Cq3\nN4TM9UnTTkFJBowrtyik9lFtUqM3HZGSrfscEHjmfF4oj+tM3AwR34OEiKNCFxfB\niZlRACU+zrez2X/bQdqcrL/t0lDoRhVWLlc+DWutAoGACNH0z1KPz7L5mjIhn/A2\nIIiQsFuIFn2k1nXTvMQ7WDbv2xrUgASjqPgeTLNQTYhyPoFYY4iY0KqKid86hOqd\n/b8rk5LXUWnryxM891lArwnBEHi3/ebpV2E87Rt491Fu5pQqZg2DXUlmjEyxaLHM\nbh0G7oA32Giihc6JVuIkmUg=\n-----END PRIVATE KEY-----\n',
+        client_email: clientEmail,
+        private_key: privateKey
     });
 
-    const today = new Date();
 
     const sheetSettings = { 
-        title: 'aldi.' + (today.getMonth() + 1) + '.' + today.getDate()
+        title: sheetTitle
     };
 
     console.log('Create sheet with settings', sheetSettings);
 
+    // Create sheet
     const sheet = await doc.addSheet(sheetSettings);
-    await sheet.resize({ rowCount: 10000, columnCount: 36, frozenRowCount: 1 });
+
+    // Set size of sheet
+    await sheet.resize({ 
+        rowCount: 10000, 
+        columnCount: 38, 
+        frozenRowCount: 1 
+    });
+
+    // Set rows
     await sheet.setHeaderRow(Object.keys(arrayOfObjects[0]));
 
-    console.log('Sheet created successfully')
+    console.log('Sheet created successfully');
 
+    // Add rows
     const rows = await sheet.addRows(arrayOfObjects);
 
-    console.log(arrayOfObjects.length, 'rows added successfully');
+    console.log(arrayOfObjects.length, 'row(s) added successfully');
 }
 
+
 // Start process
-fetch('https://esb.aldi-international.com/products/v1/offerOverviews/hu?expand=2', {
-        headers: {
-            Authorization: 'Basic ' + Buffer.from('mindshare_hu' + ':' + 'AjIvnJz8TkRgYH9P97VN').toString('base64')
-        }
-    })
-    .then(response => {
 
-        return response.json();
+// DCO or studio feed?
+menu([
+    { hotkey: 'y', title: 'Yes' },
+    { hotkey: 'n', title: 'No', selected: true }
+], {
+    header: 'Remove old details from folders?',
+    border: true,
+}).then(async (removeOldDetails) => {
 
-    })
-    .then(response => {
+    if (removeOldDetails.title === 'Yes') {
+        await fs.rmdirSync('products', { recursive: true });
+        await fs.rmdirSync('badges', { recursive: true });
+        await fs.rmdirSync('badges-cutted', { recursive: true });
 
-        const result = processFeed(response);
-        const arrayOfObjects = mixFeed(result);
-        fs.writeFileSync("aldi-feed.csv", convertToCSV(arrayOfObjects), "UTF8");
+        if (!fs.existsSync('feeds')) await fs.mkdirSync('products');
+        if (!fs.existsSync('feeds')) await fs.mkdirSync('badges');
+        if (!fs.existsSync('feeds')) await fs.mkdirSync('badges-cutted');
+    }
 
-        console.log('Write to spreadsheet');
-        writeToSpreadsheet(arrayOfObjects);
+
+    menu([
+        { hotkey: 'd', title: 'Dco feed', selected: true },
+        { hotkey: 's', title: 'Studio feed' }
+    ], {
+        header: 'Wanna make DCO or Studio feed?',
+        border: true,
+    }).then(dcoOrStudio => {
+
+        // Set DCO or studio feed
+        DCO = (dcoOrStudio.title === 'Dco feed') ? true : false;
+        
+        // Download Images?
+        menu([
+            { hotkey: 'y', title: 'Yes' },
+            { hotkey: 'n', title: 'No', selected: true }
+        ], {
+            header: 'Download Images?',
+            border: true,
+        })
+        .then(downloadImages => {
+
+            fetch('https://esb.aldi-international.com/products/v1/offerOverviews/hu?expand=2', {
+                    headers: {
+                        Authorization: 'Basic ' + Buffer.from('mindshare_hu' + ':' + 'AjIvnJz8TkRgYH9P97VN').toString('base64')
+                    }
+                })
+                .then(response => {
+                    return response.json();
+                })
+                .then(async (response) => {
+                    const result = await processFeed(response, downloadImages.title === 'Yes' ? true : false);
+                    const arrayOfObjects = await mixFeed(result);
+                    const feedFileName = 'feeds/aldi-feed' + (DCO ? '-dco-' : '-studio-') + formatDate(new Date()) + '.csv';
+
+                    // Create directory if not exists
+                    if (!fs.existsSync('feeds')) await fs.mkdirSync('feeds');
+
+                    // Write feed
+                    await fs.writeFileSync(
+                        feedFileName, 
+                        convertToCSV(arrayOfObjects), 
+                        'UTF8'
+                    );
+
+                    // Write to spreadsheet?
+                    menu([
+                        { hotkey: 'y', title: 'Yes' },
+                        { hotkey: 'n', title: 'No', selected: true }
+                    ], {
+                        header: 'Write to spreadsheet?',
+                        border: true,
+                    }).then(writeSpreadsheet => {
+                        if (writeSpreadsheet.title === 'Yes') {
+                            writeToSpreadsheet(arrayOfObjects);
+                            console.log('Finished');
+                        } else {
+                            console.log('Finished without write spreadsheet')
+                        }
+                    });
+
+                });
+        });
 
     });
+
+});
