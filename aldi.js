@@ -422,9 +422,9 @@ menu([
 }).then(async (removeOldDetails) => {
 
     if (removeOldDetails.title === 'Yes') {
-        await fs.rmdirSync('products', { recursive: true });
-        await fs.rmdirSync('badges', { recursive: true });
-        await fs.rmdirSync('badges-cutted', { recursive: true });
+        if (fs.existsSync('products')) await fs.rmdirSync('products', { recursive: true });
+        if (fs.existsSync('badges')) await fs.rmdirSync('badges', { recursive: true });
+        if (fs.existsSync('badges-cutted')) await fs.rmdirSync('badges-cutted', { recursive: true });
 
         if (!fs.existsSync('products')) await fs.mkdirSync('products');
         if (!fs.existsSync('badges')) await fs.mkdirSync('badges');
