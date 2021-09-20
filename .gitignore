@@ -1,4 +1,7 @@
+package-lock.json
+./node-modules
 ./badges
 ./feeds
 ./products
 ./badges-cutted
+./DS_Store

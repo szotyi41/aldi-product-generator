@@ -10,6 +10,7 @@ String.prototype.splice = function(idx, rem, str) {
 };
 
 var DCO = false;
+var badgeImagesNeeded = 0;
 
 //
 /*
@@ -78,7 +79,7 @@ function processFeed(json, downloadImages) {
         const productNameWithoutUppercaseWords = productName.split(' ').filter(w => !uppercasesWordsInProductName.includes(w)).join(' ');
         const productUrl = content.product?.refs?.default;
         
-        if (!productUrl || !productUrl.includes('https://www.aldi.hu/hu/ajanlatok/akciok-aldi-aron')) {
+        if (!productUrl || !productUrl.includes('mindig-akcio')) {
             return {
                 no_action_url: null
             }
@@ -89,9 +90,36 @@ function processFeed(json, downloadImages) {
         const badgeImage = content.product?.media?.assets?.[0]?.versions?.desktop.src ?? jsonString.match(/\"(https\:\/\/www\.aldi\.hu\/fileadmin[^"]{0,}badge[^\\"]{0,})/)?.[1] ?? '';
         const productImage = jsonString.match(/\"(https\:\/\/www\.aldi\.hu\/fileadmin[^"]{0,}nagy[^\\"]{0,})/)?.[1] ?? jsonString.match(/\"(https\:\/\/www\.aldi\.hu\/fileadmin[^"]{0,}\.jpg[^\\"]{0,})/)?.[1];
         
+       
         // Download images
-        if (badgeImage.length && downloadImages) download(badgeImage, { directory: './badges/' });
-        if (productImage.length && downloadImages) download(productImage, { directory: './products/' });
+        if (badgeImage.length && downloadImages)  {
+
+            badgeImagesNeeded++;
+
+            download(
+                badgeImage, 
+                { directory: './badges/', timeout: 999999 }, 
+                (err) => {
+                    if (err) {
+                        console.error('Failed to download badge image', badgeImage);
+                        return;
+                    }
+
+                }
+            );
+        }
+
+        if (productImage.length && downloadImages) {
+            download(
+                productImage, 
+                { directory: './products/', timeout: 999999 }, 
+                (err) => {
+                    if (err) {
+                        console.error('Failed to download products image', productImage);
+                    }
+                }
+            );
+        }
 
         // Prices
         const amount = content.product?.price?.amount ?? '';
@@ -202,9 +230,10 @@ function processFeed(json, downloadImages) {
     console.log(feed.filter(p => p.no_start_date === null).length + ' has no start date');
     console.log(feed.filter(p => p.no_end_date === null).length + ' has no end date');
     console.log(feed.filter(p => p.not_in_action === null).length + ' not in action');
+    console.log(feed.filter(p => p.no_action_url === null).length + ' no url wich is include "mindig-akcio"');
 
     const resultFeed = feed.filter(p => p.no_former_price !== null && p.no_start_date !== null && p.no_end_date !== null && p.not_in_action !== null && p.no_action_url !== null);
-    console.log('\x1b[32m' + resultFeed.length + '\x1b[0m/' + products.length + ' products imported', 'color: green');
+    console.log(resultFeed.length + '/' + products.length + ' products imported');
 
     return resultFeed;
 }
@@ -225,6 +254,8 @@ function mixFeed(products) {
     const days_start = ['vasárnaptól', 'hétfőtől', 'keddtől', 'szerdától', 'csütörtöktől', 'péntektől', 'szombattól'];
     const days_end = ['vasárnapig', 'hétfőig', 'keddig', 'szerdáig', 'csütörtökig', 'péntekig', 'szombatig'];
 
+    console.log('Working with ', products?.length, 'product(s)');
+
     const productsGroupBy = products.reduce((groups, product) => {
         const groupBy = product.start_date_formatted + product.end_date_formatted;
 
@@ -236,6 +267,8 @@ function mixFeed(products) {
 
         return groups;
     }, {});
+
+    console.log(Object.keys(productsGroupBy)?.length, 'groups created after group into different expiration dates');
 
 
     let result = [];
@@ -317,7 +350,7 @@ function mixFeed(products) {
 
                     slide_class_3: type === 'product' ? ' slide_3_continue' : ' slide_3_stop',
 
-                    click_url_3: 'https://www.aldi.hu/hu/ajanlatok/akciok-aldi-aron/',
+                    click_url_3: 'https://www.aldi.hu/hu/ajanlatok/mindig-akcio/',
                     cta_1: 'Ajánlatok megtekintése',
                     brand_image_1: brand_image_1,
                     brand_image_2: brand_image_2,
@@ -398,6 +431,7 @@ async function writeToSpreadsheet(arrayOfObjects) {
         frozenRowCount: 1 
     });
 
+
     // Set rows
     await sheet.setHeaderRow(Object.keys(arrayOfObjects[0]));
 
@@ -453,7 +487,7 @@ menu([
         })
         .then(downloadImages => {
 
-            fetch('https://esb.aldi-international.com/products/v1/offerOverviews/hu?expand=2', {
+                fetch('https://esb.aldi-international.com/products/v1/offerOverviews/hu?expand=2', {
                     headers: {
                         Authorization: 'Basic ' + Buffer.from('mindshare_hu' + ':' + 'AjIvnJz8TkRgYH9P97VN').toString('base64')
                     }
@@ -462,37 +496,44 @@ menu([
                     return response.json();
                 })
                 .then(async (response) => {
-                    const result = await processFeed(response, downloadImages.title === 'Yes' ? true : false);
-                    const arrayOfObjects = await mixFeed(result);
-                    const feedFileName = 'feeds/aldi-feed' + (DCO ? '-dco-' : '-studio-') + formatDate(new Date()) + '.csv';
 
-                    // Create directory if not exists
-                    if (!fs.existsSync('feeds')) await fs.mkdirSync('feeds');
+                console.log('Feed downloading started from aldi server');
+                const result = await processFeed(response, downloadImages.title === 'Yes' ? true : false);
+                console.log('Feed mixing started');          
+                console.log('You must have ', badgeImagesNeeded, ' badge images after finish');  
 
-                    // Write feed
-                    await fs.writeFileSync(
-                        feedFileName, 
-                        convertToCSV(arrayOfObjects), 
-                        'UTF8'
-                    );
+                const arrayOfObjects = await mixFeed(result);
+                const feedFileName = 'feeds/aldi-feed' + (DCO === true ? '-dco-' : '-studio-') + formatDate(new Date()) + '.csv';
 
-                    // Write to spreadsheet?
-                    menu([
-                        { hotkey: 'y', title: 'Yes' },
-                        { hotkey: 'n', title: 'No', selected: true }
-                    ], {
-                        header: 'Write to spreadsheet?',
-                        border: true,
-                    }).then(writeSpreadsheet => {
-                        if (writeSpreadsheet.title === 'Yes') {
-                            writeToSpreadsheet(arrayOfObjects);
-                            console.log('Finished');
-                        } else {
-                            console.log('Finished without write spreadsheet')
-                        }
-                    });
+                // Create directory if not exists
+                if (!fs.existsSync('feeds')) await fs.mkdirSync('feeds');
 
+                console.log('Feed writing to /feeds folder started');
+
+                // Write feed
+                await fs.writeFileSync(
+                   feedFileName, 
+                   convertToCSV(arrayOfObjects), 
+                   'UTF8'
+                );
+
+                // Write to spreadsheet?
+                menu([
+                    { hotkey: 'y', title: 'Yes' },
+                    { hotkey: 'n', title: 'No', selected: true }
+                ], {
+                    header: 'Write to spreadsheet?',
+                    border: true,
+                }).then(writeSpreadsheet => {
+                    if (writeSpreadsheet.title === 'Yes') {
+                        writeToSpreadsheet(arrayOfObjects);
+                        console.log('Finished');
+                    } else {
+                        console.log('Finished without write spreadsheet')
+                    }
                 });
+
+            });
         });
 
     });
