@@ -1,0 +1,28 @@
+{
+  "name": "aldi-scripts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "aldi.js",
+  "dependencies": {
+    "canvas": "^2.8.0",
+    "console-menu": "^0.1.0",
+    "download-file": "^0.1.5",
+    "get-pixels": "^3.3.3",
+    "google-spreadsheet": "^3.1.15",
+    "image-clipper": "^0.4.4"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://szotyi41: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@github.com/szotyi41/aldi-product-generator.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/szotyi41/aldi-product-generator/issues"
+  },
+  "homepage": "https://github.com/szotyi41/aldi-product-generator#readme"
+}

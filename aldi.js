@@ -12,6 +12,10 @@ String.prototype.splice = function(idx, rem, str) {
 var DCO = false;
 var badgeImagesNeeded = 0;
 
+
+// Tej
+// 10%
+
 //
 /*
 TODO 
@@ -74,9 +78,10 @@ function processFeed(json, downloadImages) {
     const feed = products.map((content) => {
 
         // Product name
+        const whitelistUppercases = ['UHT', 'ESL'];
         const productName = content.product?.texts?.default ?? '';
         const uppercasesWordsInProductName = (productName.match(/([A-Z\-\!\ÁŰÚŐÓÜÖÉ\'\-]{1,})\s/g) ?? []).map(a => a.trim());
-        const productNameWithoutUppercaseWords = productName.split(' ').filter(w => !uppercasesWordsInProductName.includes(w)).join(' ');
+        const productNameWithoutUppercaseWords = productName.split(' ').filter(w => whitelistUppercases.includes(w) || !uppercasesWordsInProductName.includes(w)).join(' ');
         const productUrl = content.product?.refs?.default;
         
         if (!productUrl || !productUrl.includes('mindig-akcio')) {
@@ -158,10 +163,13 @@ function processFeed(json, downloadImages) {
         // OR the percent is smaller than 15% -> do not show -8% instead: -8Ft
         // ELSE
         // Show percent
-        const priceDifferenceFormatted =  (priceInPercent < 11) ? '' : 
+        const priceDifferenceFormatted =  
+            // Can divide by 100
             (((Number.isInteger(priceDifference / 100) && priceDifference.toString().length < 4)) ? 
-            ('-' + priceDifference.toString().split(' ').join('') + 'Ft') : 
-            ('-' + priceInPercent + "<span style='font-size:14px'>%</span>"));
+                ('-' + priceDifference.toString().split(' ').join('') + 'Ft') : 
+
+                // Price difference smaller than 10% write nothing else, the percent
+                (priceInPercent < 10) ? '' : ('-' + priceInPercent + "<span style='font-size:14px'>%</span>"));
        
         // Dates
         const regexDates = content.product?.texts?.descriptionHtml.match(/([0-9]{4}(-|.)[0-9]{2}(-|.)[0-9]{2}).*([0-9]{4}(-|.)[0-9]{2}(-|.)[0-9]{2})\-ig/i);
@@ -426,8 +434,8 @@ async function writeToSpreadsheet(arrayOfObjects) {
 
     // Set size of sheet
     await sheet.resize({ 
-        rowCount: 10000, 
-        columnCount: 38, 
+        rowCount: 1250, 
+        columnCount: 40, 
         frozenRowCount: 1 
     });
 
