@@ -292,8 +292,8 @@ function mixFeed(products) {
                 
                 const start_day = days_start[p1.start_date_object.getDay()];
                 const end_day = days_end[p1.end_date_object.getDay()];
-                const start_date = '2021-' + (p1.start_date_formatted).replace(/\./g, '-').slice(0, -1);
-                const end_date = '2021-' + (p1.end_date_formatted).replace(/\./g, '-').slice(0, -1);
+                const start_date = '2022-' + (p1.start_date_formatted).replace(/\./g, '-').slice(0, -1);
+                const end_date = '2022-' + (p1.end_date_formatted).replace(/\./g, '-').slice(0, -1);
 
 
                 const advert_id = DCO ? '' : p1.product_name + '_' + p2.product_name + '_' + type;
@@ -379,7 +379,7 @@ function mixFeed(products) {
         const def = Object.assign({}, result[0]);
         def.advert_id = def.advert_id + '_default';
         def.is_default = 'true';
-        def.start_date = '2021-01-01';
+        def.start_date = '2022-01-01';
         def.end_date = '2023-01-01';
         result.unshift(def);
     }
