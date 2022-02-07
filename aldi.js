@@ -80,8 +80,18 @@ function processFeed(json, downloadImages) {
         // Product name
         const whitelistUppercases = ['UHT', 'ESL'];
         const productName = content.product?.texts?.default ?? '';
-        const uppercasesWordsInProductName = (productName.match(/([A-Z\-\!\ÁŰÚŐÓÜÖÉ\'\-]{1,})\s/g) ?? []).map(a => a.trim());
-        const productNameWithoutUppercaseWords = productName.split(' ').filter(w => whitelistUppercases.includes(w) || !uppercasesWordsInProductName.includes(w)).join(' ');
+        const uppercasesWordsInProductName = (productName.match(/([A-Z\-\!\ÁŰÚŐÄÓÜÖÉ\'\-]{1,})\s/g) ?? []).map(a => a.trim());
+
+        // Brand name wihtout UHT, ESL
+        const productBrandName = productName.split(' ')
+            .filter(w => !whitelistUppercases.includes(w) && uppercasesWordsInProductName.includes(w))
+            .join(' ');
+
+        // Product name without brand name
+        const productNameWithoutUppercaseWords = productName.split(' ')
+            .filter(w => whitelistUppercases.includes(w) || !uppercasesWordsInProductName.includes(w))
+            .join(' ');
+
         const productUrl = content.product?.refs?.default;
         
         if (!productUrl || !productUrl.includes('mindig-akcio')) {
@@ -209,6 +219,7 @@ function processFeed(json, downloadImages) {
 
         return {
             product_name: productName,
+            brand_name: productBrandName,
             product_name_formatted: productNameWithoutUppercaseWords,
             product_image_1_url: productImage,
             product_image_1: (productImage?.length ? 'hu-HU/product/' : '') + baseName(productImage) + (productImage?.length ? '.jpg' : ''),
@@ -259,8 +270,11 @@ function baseName(url) {
 function mixFeed(products) {
 
     const types = ['product', 'packshot'];
+    const dtks = ['centralavpackage', 'jofogas', 'infinetyavpackage', 'pbudisplay'];
     const days_start = ['vasárnaptól', 'hétfőtől', 'keddtől', 'szerdától', 'csütörtöktől', 'péntektől', 'szombattól'];
     const days_end = ['vasárnapig', 'hétfőig', 'keddig', 'szerdáig', 'csütörtökig', 'péntekig', 'szombatig'];
+    const utm_month = ['januar', 'fabruar', 'marcius', 'aprilis', 'majus', 'junius', 'julius', 'augusztus', 'szeptember', 'oktober', 'november', 'december'];
+    const current_month = new Date().getMonth();
 
     console.log('Working with ', products?.length, 'product(s)');
 
@@ -283,94 +297,108 @@ function mixFeed(products) {
 
     types.forEach(type => {
 
-        Object.keys(productsGroupBy).forEach((dateInerval) => {
+        dtks.forEach(dtk => {
 
-            const mixedAdvertsInOneGroup = productsGroupBy[dateInerval].map((product, productIndex) => {
+            Object.keys(productsGroupBy).forEach((dateInerval) => {
 
-                const p1 = productsGroupBy[dateInerval][productIndex];
-                const p2 = productsGroupBy[dateInerval]?.[productIndex + 1] ?? productsGroupBy[dateInerval]?.[productIndex - 1] ?? productsGroupBy[dateInerval]?.[productIndex];
-                
-                const start_day = days_start[p1.start_date_object.getDay()];
-                const end_day = days_end[p1.end_date_object.getDay()];
-                const start_date = '2022-' + (p1.start_date_formatted).replace(/\./g, '-').slice(0, -1);
-                const end_date = '2022-' + (p1.end_date_formatted).replace(/\./g, '-').slice(0, -1);
+                const mixedAdvertsInOneGroup = productsGroupBy[dateInerval].map((product, productIndex) => {
+
+                    const p1 = productsGroupBy[dateInerval][productIndex];
+                    const p2 = productsGroupBy[dateInerval]?.[productIndex + 1] ?? productsGroupBy[dateInerval]?.[productIndex - 1] ?? productsGroupBy[dateInerval]?.[productIndex];
+                    
+                    const start_day = days_start[p1.start_date_object.getDay()];
+                    const end_day = days_end[p1.end_date_object.getDay()];
+                    const start_date = '2022-' + (p1.start_date_formatted).replace(/\./g, '-').slice(0, -1);
+                    const end_date = '2022-' + (p1.end_date_formatted).replace(/\./g, '-').slice(0, -1);
 
 
-                const advert_id = DCO ? '' : p1.product_name + '_' + p2.product_name + '_' + type;
-                const advert_name = DCO ? start_date + ' ' + end_date : type;
-                const reporting_label = p1.product_image_1_url.replace(/(.*)\//, '') + '_' + p2.product_image_1_url.replace(/(.*)\//, '') + '_' + type;
+                    const advert_id = DCO ? '' : p1.product_name + '_' + p2.product_name + '_' + type + '_' + dtk;
+                    const advert_name = DCO ? start_date + ' ' + end_date : type;
+                    const reporting_label = p1.product_image_1_url.replace(/(.*)\//, '') + '_' + p2.product_image_1_url.replace(/(.*)\//, '') + '_' + type;
 
-                const subheadline = 'Érvényes: <b>' + p1.start_date_formatted + '</b> ' + start_day + ' <b>' + p1.end_date_formatted + '</b> ' + end_day + '.';
-                
-                const sticker_image_1 = DCO ? p1.product_badge_image : ((p1.product_badge_image_url) ? ('DRM_Asset:Aldi/badges/' + baseName(p1.product_badge_image_url) + '.jpg') : 'DRM_Asset:Aldi/1x1.png');
-                const sticker_image_2 = DCO ? p2.product_badge_image : ((p2.product_badge_image_url) ? ('DRM_Asset:Aldi/badges/' + baseName(p2.product_badge_image_url) + '.jpg') : 'DRM_Asset:Aldi/1x1.png');
+                    const subheadline = 'Érvényes: <b>' + p1.start_date_formatted + '</b> ' + start_day + ' <b>' + p1.end_date_formatted + '</b> ' + end_day + '.';
+                    
+                    const sticker_image_1 = DCO ? p1.product_badge_image : ((p1.product_badge_image_url) ? ('DRM_Asset:Aldi/badges/' + baseName(p1.product_badge_image_url) + '.jpg') : 'DRM_Asset:Aldi/1x1.png');
+                    const sticker_image_2 = DCO ? p2.product_badge_image : ((p2.product_badge_image_url) ? ('DRM_Asset:Aldi/badges/' + baseName(p2.product_badge_image_url) + '.jpg') : 'DRM_Asset:Aldi/1x1.png');
 
-                const product_image_1 = DCO ? p1.product_image_1 : p1.product_image_1_url;
-                const product_image_2 = DCO ? p2.product_image_1 : p2.product_image_1_url;
+                    const product_image_1 = DCO ? p1.product_image_1 : p1.product_image_1_url;
+                    const product_image_2 = DCO ? p2.product_image_1 : p2.product_image_1_url;
 
-                const brand_image_1 = DCO ? 'hu-HU/brand/logo.svg' : 'DRM_Asset:Aldi/logo.svg';
-                const brand_image_2 = DCO ? 'hu-HU/brand/logo_2.svg' : 'DRM_Asset:Aldi/logo_2.svg'
+                    const brand_image_1 = DCO ? 'hu-HU/brand/logo.svg' : 'DRM_Asset:Aldi/logo.svg';
+                    const brand_image_2 = DCO ? 'hu-HU/brand/logo_2.svg' : 'DRM_Asset:Aldi/logo_2.svg'
 
-                if (p1.start_date !== p2.start_date) {
-                    console.error('\x1b[31mAfter mixing the two product in same creative has different START dates\x1b[0m');
-                }
+                    const utm_parameters = '?' + 
+                            'utm_source=' + dtk + '&' + 
+                            'utm_medium=paid_display&' + 
+                            'utm_campaign=arkomm_' + utm_month[current_month] + '&' + 
+                            'utm_content={{dimension_tag}}';
 
-                if (p1.end_date !== p2.end_date) {
-                    console.error('\x1b[31mAfter mixing the two product in same creative has different END dates\x1b[0m');
-                }
+                    if (p1.start_date !== p2.start_date) {
+                        console.error('\x1b[31mAfter mixing the two product in same creative has different START dates\x1b[0m');
+                    }
 
-                return {
-                    advert_id: advert_id,
-                    reporting_label: reporting_label,
-                    theme: 'KW3',
-                    is_default: 'false',
-                    active: 'true',
-                    start_date: start_date,
-                    end_date: end_date,
-                    advert_name: advert_name,
-                    subheadline: subheadline,
-                    subheadline_report: start_day + ' - ' + end_day,
+                    if (p1.end_date !== p2.end_date) {
+                        console.error('\x1b[31mAfter mixing the two product in same creative has different END dates\x1b[0m');
+                    }
 
-                    slide_class_1: 'slide_1',
-                    product_name_1: p1.product_name_formatted,
-                    click_url_1: p1.product_url,
-                    sticker_image_1: sticker_image_1,
-                    product_image_1: product_image_1,
-                    product_description_1: p1.product_price_base,
-                    price_offer_1: p1.product_price_difference_formatted,
-                    price_new_1: p1.product_price_formatted,
-                    price_old_1: p1.product_former_price_formatted,
-                    price_unit_1: p1.product_amount,
-                    product_date_1: p1.start_date,
+                    return {
+                        advert_id: advert_id,
+                        reporting_label: reporting_label,
+                        dynamic_targeting_key: dtk,
+                        theme: 'KW3',
+                        is_default: 'false',
+                        active: 'true',
+                        start_date: start_date,
+                        end_date: end_date,
+                        advert_name: advert_name,
+                        subheadline: subheadline,
+                        subheadline_report: start_day + ' - ' + end_day,
 
-                    slide_class_2: type === 'product' ? ' slide_2_stop' : ' slide_2_continue',
+                        slide_class_1: 'slide_1',
+                        product_name_1: p1.product_name_formatted,
+                        click_url_1: p1.product_url + utm_parameters,
+                        // sticker_image_1: sticker_image_1,
+                        product_image_1: product_image_1,
+                        product_description_1: p1.product_price_base,
+                        price_offer_1: p1.product_price_difference_formatted,
+                        price_new_1: p1.product_price_formatted,
+                        price_old_1: p1.product_former_price_formatted,
+                        price_unit_1: p1.product_amount,
+                        product_date_1: p1.start_date,
+                        brand_name_1: p1.brand_name,
 
-                    product_name_2: p2.product_name_formatted,
-                    click_url_2: p2.product_url,
-                    sticker_image_2: sticker_image_2,
-                    product_image_2: product_image_2,
-                    product_description_2: p2.product_price_base,
-                    price_offer_2: p2.product_price_difference_formatted,
-                    price_new_2: p2.product_price_formatted,
-                    price_old_2: p2.product_former_price_formatted,
-                    price_unit_2: p2.product_amount,
-                    product_date_2: p2.start_date,
+                        slide_class_2: type === 'product' ? ' slide_2_stop' : ' slide_2_continue',
 
-                    slide_class_3: type === 'product' ? ' slide_3_continue' : ' slide_3_stop',
+                        product_name_2: p2.product_name_formatted,
+                        click_url_2: p2.product_url + utm_parameters,
+                        // sticker_image_2: sticker_image_2,
+                        product_image_2: product_image_2,
+                        product_description_2: p2.product_price_base,
+                        price_offer_2: p2.product_price_difference_formatted,
+                        price_new_2: p2.product_price_formatted,
+                        price_old_2: p2.product_former_price_formatted,
+                        price_unit_2: p2.product_amount,
+                        product_date_2: p2.start_date,
+                        brand_name_2: p2.brand_name,
 
-                    click_url_3: 'https://www.aldi.hu/hu/ajanlatok/mindig-akcio/',
-                    cta_1: 'Ajánlatok megtekintése',
-                    brand_image_1: brand_image_1,
-                    brand_image_2: brand_image_2,
-                    /*description_1: p1.product_description,
-                    description_2: p2.product_description,*/
-                };
-            });
+                        slide_class_3: type === 'product' ? ' slide_3_continue' : ' slide_3_stop',
 
-            //result[dateInerval] = mixedAdvertsInOneGroup; 
-            result = [...result, ...mixedAdvertsInOneGroup];
+                        click_url_3: 'https://www.aldi.hu/hu/ajanlatok/mindig-akcio/' + utm_parameters,
 
-        }, []);
+                        cta_1: 'Ajánlatok megtekintése',
+                        brand_image_1: brand_image_1,
+                        brand_image_2: brand_image_2,
+                        /*description_1: p1.product_description,
+                        description_2: p2.product_description,*/
+                    };
+                });
+
+                //result[dateInerval] = mixedAdvertsInOneGroup; 
+                result = [...result, ...mixedAdvertsInOneGroup];
+
+            }, []);
+
+        });
 
     });
 
@@ -435,7 +463,7 @@ async function writeToSpreadsheet(arrayOfObjects) {
     // Set size of sheet
     await sheet.resize({ 
         rowCount: 1250, 
-        columnCount: 40, 
+        columnCount: 41, 
         frozenRowCount: 1 
     });
 
