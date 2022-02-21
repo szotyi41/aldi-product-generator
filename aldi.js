@@ -270,7 +270,7 @@ function baseName(url) {
 function mixFeed(products) {
 
     const types = ['product', 'packshot'];
-    const dtks = ['centralavpackage', 'jofogas', 'infinetyavpackage', 'pbudisplay'];
+    const dtks = ['centralavpackage', 'jofogas', 'infinetyavpackage', 'dv360'];
     const days_start = ['vasárnaptól', 'hétfőtől', 'keddtől', 'szerdától', 'csütörtöktől', 'péntektől', 'szombattól'];
     const days_end = ['vasárnapig', 'hétfőig', 'keddig', 'szerdáig', 'csütörtökig', 'péntekig', 'szombatig'];
     const utm_month = ['januar', 'fabruar', 'marcius', 'aprilis', 'majus', 'junius', 'julius', 'augusztus', 'szeptember', 'oktober', 'november', 'december'];
